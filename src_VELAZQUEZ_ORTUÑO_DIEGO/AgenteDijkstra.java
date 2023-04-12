@@ -12,21 +12,22 @@ import tools.ElapsedCpuTimer;
 import tools.Vector2d;
 
 
-/*
-public boolean equals(Object obj) {
-	//if(obj == this) { return true; }
-	//if(!(obj instanceof Nodo)) { return false; }
-	Nodo n = (Nodo) obj;
-	boolean prueba = this.x==n.x && this.y==n.y;
-	System.out.println("Prueba comparacion: " + prueba);
-	return prueba;
-}*/
-
 public class AgenteDijkstra extends AbstractPlayer {
 	
 	private static final int INF = Integer.MAX_VALUE;
 	
-	class Nodo {
+	public class Pair<F, S> {
+	    final F f;
+	    final S s;
+
+	    public Pair(F first, S second) {
+	        this.f = first;
+	        this.s = second;
+	    }
+	}
+
+	
+	static class Nodo {
 		int x, y;
 		int coste;
 		Nodo padre;
@@ -55,20 +56,29 @@ public class AgenteDijkstra extends AbstractPlayer {
 			this.act = act;
 			this.padre = padre;
 		}
+		
+		@Override
+		public int hashCode() {
+		    return Objects.hash(x, y);
+		}
 
 		@Override
 		public boolean equals(Object obj) {
 			Nodo n = (Nodo) obj;
 			boolean prueba = this.x==n.x && this.y==n.y;
-			//System.out.println("Prueba comparacion para nodo " + this.x + " " + this.y + " con nodo " + n.x + " " + n.y + ": " + prueba);
 			return prueba;
 		}
 	}
 	
 	Vector2d fescala, portal, avatar;
 	
-	ArrayList<ACTIONS> acciones;
+	ArrayList<Pair<ACTIONS,Pair<Integer,Integer>>> act;
+	Stack<ACTIONS> acciones;
 	
+	PriorityQueue<Nodo> abiertos;
+	HashSet<Nodo> cerrados;
+	HashSet<Vector2d> muros;
+	HashSet<Vector2d> trampas;
 	
 	/**
 	 * in
@@ -84,7 +94,18 @@ public class AgenteDijkstra extends AbstractPlayer {
 		portal.x = Math.floor(portal.x/fescala.x);
 		portal.y = Math.floor(portal.y/fescala.y);
 		
-		acciones = new ArrayList<>();
+		acciones = new Stack<>();
+		
+		act = new ArrayList<Pair<ACTIONS,Pair<Integer,Integer>>>();
+		act.add( new Pair<ACTIONS,Pair<Integer,Integer>>( ACTIONS.ACTION_UP, new Pair<Integer,Integer>(0,-1) ) );
+		act.add( new Pair<ACTIONS,Pair<Integer,Integer>>( ACTIONS.ACTION_DOWN, new Pair<Integer,Integer>(0,1) ) );
+		act.add( new Pair<ACTIONS,Pair<Integer,Integer>>( ACTIONS.ACTION_LEFT, new Pair<Integer,Integer>(-1,0) ) );
+		act.add( new Pair<ACTIONS,Pair<Integer,Integer>>( ACTIONS.ACTION_RIGHT, new Pair<Integer,Integer>(1,0) ) );
+		
+		abiertos = new PriorityQueue<>(Comparator.comparingInt(n -> n.coste));
+		cerrados = new HashSet<>();
+		
+		//muros = so.getImmovablePositions().get(0);
 	}
 	
 	
@@ -94,9 +115,6 @@ public class AgenteDijkstra extends AbstractPlayer {
 	 * @param et
 	 */
 	private void caminoDijkastra( StateObservation so, ElapsedCpuTimer et ) {
-		PriorityQueue<Nodo> abiertos = new PriorityQueue<>(Comparator.comparingInt(n -> n.coste));
-		ArrayList<Nodo> cerrados = new ArrayList<>();
-		
 		long tInicial = System.nanoTime();
 		
 		abiertos.add(new Nodo((int)avatar.x, (int)avatar.y, 0));
@@ -106,43 +124,25 @@ public class AgenteDijkstra extends AbstractPlayer {
 			
 			if (n_actual.x==(int)portal.x && n_actual.y==(int)portal.y) {
 				while (n_actual.padre != null) {
-					//System.out.println("Nodo: " + n_actual.x + " " + n_actual.y);
-					acciones.add(n_actual.act);
+					acciones.push(n_actual.act);
 					n_actual = n_actual.padre;
 				}
-				Collections.reverse(acciones);
 				break;
 			}
 			
 			cerrados.add(n_actual);
-			Nodo n_vecino;
 			
-			if  (so.getObservationGrid()[n_actual.x][n_actual.y-1].isEmpty() || (n_actual.x==(int)portal.x && n_actual.y-1==(int)portal.y)) {				
-				n_vecino = new Nodo(n_actual.x, n_actual.y-1, n_actual.coste+1, Types.ACTIONS.ACTION_UP, n_actual);
-				if (!cerrados.contains(n_vecino)) { abiertos.add(n_vecino); }
-			}
-			
-			if  (so.getObservationGrid()[n_actual.x][n_actual.y+1].isEmpty() || (n_actual.x==(int)portal.x && n_actual.y+1==(int)portal.y)) {
-				n_vecino = new Nodo(n_actual.x, n_actual.y+1, n_actual.coste+1, Types.ACTIONS.ACTION_DOWN, n_actual);
-				if (!cerrados.contains(n_vecino)) { abiertos.add(n_vecino); }
-			}
-			
-			if (so.getObservationGrid()[n_actual.x-1][n_actual.y].isEmpty() || (n_actual.x-1==(int)portal.x && n_actual.y==(int)portal.y)) {
-				n_vecino = new Nodo(n_actual.x-1, n_actual.y, n_actual.coste+1, Types.ACTIONS.ACTION_LEFT, n_actual);
-				if (!cerrados.contains(n_vecino)) { abiertos.add(n_vecino); }
-			}
-			
-			if (so.getObservationGrid()[n_actual.x+1][n_actual.y].isEmpty() || (n_actual.x+1==(int)portal.x && n_actual.y==(int)portal.y)) {
-				n_vecino = new Nodo(n_actual.x+1, n_actual.y, n_actual.coste+1, Types.ACTIONS.ACTION_RIGHT, n_actual);
-				if (!cerrados.contains(n_vecino)) { abiertos.add(n_vecino); }
+			for ( Pair<ACTIONS,Pair<Integer,Integer>> a : act ) {
+				if (so.getObservationGrid()[n_actual.x+a.s.f][n_actual.y+a.s.s].isEmpty() || (n_actual.x+a.s.f==(int)portal.x && n_actual.y+a.s.s==(int)portal.y) ) {
+					Nodo n_vecino = new Nodo(n_actual.x+a.s.f, n_actual.y+a.s.s, n_actual.coste+1, a.f, n_actual);
+					if (!cerrados.contains(n_vecino)) { abiertos.add(n_vecino); }
+				}
 			}
 		}
 		
 		long tFinal = System.nanoTime();
 		
-		long tTotal = (tFinal-tInicial) / 1000000;
-		
-		System.out.println("\nTº alg: " + tTotal + "\tTam ruta: " + acciones.size() + "\tNº nodos expand: " + cerrados.size() );
+		System.out.println("\nTº alg: " + (tFinal-tInicial) / 1000000 + "\tTam ruta: " + acciones.size() + "\tNº nodos expand: " + cerrados.size() );
 	}
 	
 	
@@ -155,12 +155,10 @@ public class AgenteDijkstra extends AbstractPlayer {
 	@Override
 	public ACTIONS act( StateObservation so, ElapsedCpuTimer et ) {
 		avatar = new Vector2d( so.getAvatarPosition().x/fescala.x , so.getAvatarPosition().y/fescala.y );
-		
+
 		if (acciones.isEmpty()) { this.caminoDijkastra(so,et); }
 		
-		if (!acciones.isEmpty()) {
-			return acciones.remove(0);
-		}
+		if (!acciones.isEmpty()) { return acciones.pop(); }
 		else { return Types.ACTIONS.ACTION_NIL; }
 	}
 	
