@@ -10,22 +10,11 @@ import ontology.Types;
 import ontology.Types.ACTIONS;
 import tools.ElapsedCpuTimer;
 import tools.Vector2d;
-
+import tools.Pair;
 
 public class AgenteDijkstra extends AbstractPlayer {
 	
 	private static final int INF = Integer.MAX_VALUE;
-	
-	public class Pair<F, S> {
-	    final F f;
-	    final S s;
-
-	    public Pair(F first, S second) {
-	        this.f = first;
-	        this.s = second;
-	    }
-	}
-
 	
 	static class Nodo {
 		int x, y;
@@ -34,40 +23,25 @@ public class AgenteDijkstra extends AbstractPlayer {
 		ACTIONS act;
 		
 		public Nodo(int x, int y) {
-			this.x = x;
-			this.y = y;
-			coste = INF;
-			padre = null;
-			act = ACTIONS.ACTION_NIL;
+			this.x = x; this.y = y;
+			coste = INF; padre = null; act = ACTIONS.ACTION_NIL;
 		}
 		
 		public Nodo(int x, int y, int coste) {
-			this.x = x;
-			this.y = y;
-			this.coste = coste;
-			padre = null;
-			act = ACTIONS.ACTION_NIL;
+			this.x = x; this.y = y;
+			this.coste = coste; padre = null; act = ACTIONS.ACTION_NIL;
 		}
 		
 		public Nodo(int x, int y, int coste, ACTIONS act, Nodo padre) {
-			this.x = x;
-			this.y = y;
-			this.coste = coste;
-			this.act = act;
-			this.padre = padre;
+			this.x = x; this.y = y;
+			this.coste = coste; this.padre = padre; this.act = act;
 		}
 		
 		@Override
-		public int hashCode() {
-		    return Objects.hash(x, y);
-		}
+		public int hashCode() { return Objects.hash(x, y); }
 
 		@Override
-		public boolean equals(Object obj) {
-			Nodo n = (Nodo) obj;
-			boolean prueba = this.x==n.x && this.y==n.y;
-			return prueba;
-		}
+		public boolean equals(Object obj) { Nodo n = (Nodo) obj; return this.x==n.x && this.y==n.y; }
 	}
 	
 	Vector2d fescala, portal, avatar;
@@ -77,8 +51,6 @@ public class AgenteDijkstra extends AbstractPlayer {
 	
 	PriorityQueue<Nodo> abiertos;
 	HashSet<Nodo> cerrados;
-	HashSet<Vector2d> muros;
-	HashSet<Vector2d> trampas;
 	
 	/**
 	 * in
@@ -104,8 +76,6 @@ public class AgenteDijkstra extends AbstractPlayer {
 		
 		abiertos = new PriorityQueue<>(Comparator.comparingInt(n -> n.coste));
 		cerrados = new HashSet<>();
-		
-		//muros = so.getImmovablePositions().get(0);
 	}
 	
 	
@@ -114,13 +84,14 @@ public class AgenteDijkstra extends AbstractPlayer {
 	 * @param so
 	 * @param et
 	 */
-	private void caminoDijkastra( StateObservation so, ElapsedCpuTimer et ) {
+	private void caminoDijkastra( StateObservation so ) {
 		long tInicial = System.nanoTime();
 		
 		abiertos.add(new Nodo((int)avatar.x, (int)avatar.y, 0));
 		
 		while (!abiertos.isEmpty()) {
 			Nodo n_actual = abiertos.poll();
+			cerrados.add(n_actual);
 			
 			if (n_actual.x==(int)portal.x && n_actual.y==(int)portal.y) {
 				while (n_actual.padre != null) {
@@ -130,12 +101,13 @@ public class AgenteDijkstra extends AbstractPlayer {
 				break;
 			}
 			
-			cerrados.add(n_actual);
-			
 			for ( Pair<ACTIONS,Pair<Integer,Integer>> a : act ) {
-				if (so.getObservationGrid()[n_actual.x+a.s.f][n_actual.y+a.s.s].isEmpty() || (n_actual.x+a.s.f==(int)portal.x && n_actual.y+a.s.s==(int)portal.y) ) {
-					Nodo n_vecino = new Nodo(n_actual.x+a.s.f, n_actual.y+a.s.s, n_actual.coste+1, a.f, n_actual);
-					if (!cerrados.contains(n_vecino)) { abiertos.add(n_vecino); }
+				if (so.getObservationGrid()[n_actual.x+a.second.first][n_actual.y+a.second.second].isEmpty() || (n_actual.x+a.second.first==(int)portal.x && n_actual.y+a.second.second==(int)portal.y) ) {
+					Nodo n_vecino = new Nodo(n_actual.x+a.second.first, n_actual.y+a.second.second, n_actual.coste+1, a.first, n_actual);
+					if (!cerrados.contains(n_vecino)) {
+						abiertos.remove(n_vecino);
+						abiertos.add(new Nodo(n_actual.x+a.second.first, n_actual.y+a.second.second, n_actual.coste+1, a.first, n_actual));
+					}
 				}
 			}
 		}
@@ -156,10 +128,9 @@ public class AgenteDijkstra extends AbstractPlayer {
 	public ACTIONS act( StateObservation so, ElapsedCpuTimer et ) {
 		avatar = new Vector2d( so.getAvatarPosition().x/fescala.x , so.getAvatarPosition().y/fescala.y );
 
-		if (acciones.isEmpty()) { this.caminoDijkastra(so,et); }
+		if (acciones.isEmpty()) { this.caminoDijkastra(so); }
 		
 		if (!acciones.isEmpty()) { return acciones.pop(); }
 		else { return Types.ACTIONS.ACTION_NIL; }
-	}
-	
+	}	
 }
