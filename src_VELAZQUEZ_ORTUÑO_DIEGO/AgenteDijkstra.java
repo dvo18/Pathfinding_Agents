@@ -85,7 +85,7 @@ public class AgenteDijkstra extends AbstractPlayer {
 	 * @param et
 	 */
 	private void caminoDijkastra( StateObservation so ) {
-		long tInicial = System.nanoTime();
+		double tInicial = System.nanoTime();
 		
 		abiertos.add(new Nodo((int)avatar.x, (int)avatar.y, 0));
 		
@@ -105,14 +105,25 @@ public class AgenteDijkstra extends AbstractPlayer {
 				if (so.getObservationGrid()[n_actual.x+a.second.first][n_actual.y+a.second.second].isEmpty() || (n_actual.x+a.second.first==(int)portal.x && n_actual.y+a.second.second==(int)portal.y) ) {
 					Nodo n_vecino = new Nodo(n_actual.x+a.second.first, n_actual.y+a.second.second, n_actual.coste+1, a.first, n_actual);
 					if (!cerrados.contains(n_vecino)) {
-						abiertos.remove(n_vecino);
-						abiertos.add(new Nodo(n_actual.x+a.second.first, n_actual.y+a.second.second, n_actual.coste+1, a.first, n_actual));
+						boolean encontrado = false;
+						
+						for (Nodo n : abiertos) {
+						    if (n.equals(n_vecino)) {
+						        if (n_vecino.coste < n.coste) {
+						            abiertos.remove(n);
+						            abiertos.add(n_vecino);
+						        }
+						        encontrado = true;
+						        break;
+						    }
+						}
+						if (!encontrado) abiertos.add(n_vecino);
 					}
 				}
 			}
 		}
 		
-		long tFinal = System.nanoTime();
+		double tFinal = System.nanoTime();
 		
 		System.out.println("\nTº alg: " + (tFinal-tInicial) / 1000000 + "\tTam ruta: " + acciones.size() + "\tNº nodos expand: " + cerrados.size() );
 	}
